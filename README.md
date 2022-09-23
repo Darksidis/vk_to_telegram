@@ -1,21 +1,21 @@
 # vk_to_telegram
 
-## About
+### About
 -------
 
 A program that transfers content from a VK public to a Telegram channel
 
-## What did I use
+### What did I use
 -------
 
 Golang, VK API, Telegram API
 
-## How it works
+### How it works
 --------
 
 The program monitors updates in the VK public, and when new posts appear, it pulls out text and multimedia using the VK-api method, transfers it to the designated telegram channel.
 
-## How it starts
+### How it starts
 --------
 
 Small preparations
