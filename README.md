@@ -26,9 +26,9 @@ You will need
 - ID of your channel in telegram (send the post from the channel here https://t.me/getmyid_bot)
 
 Create an .env file with the following information.
-VK_TOKEN
-BOT_TOKEN
-ID_CHANNEL
+- VK_TOKEN
+- BOT_TOKEN
+- ID_CHANNEL
 
 You can run through a binary file
 ```
