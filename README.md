@@ -13,7 +13,7 @@ Golang, VK API, Telegram API
 ### How it works
 --------
 
-The program monitors updates in the VK public, and when new posts appear, it pulls out text and multimedia using the VK-api method, transfers it to the designated telegram channel.
+The program monitors updates in the VK public, and when new posts appear, it pulls out text and multimedia (except for music) using the VK-api method, transfers it to the designated telegram channel.
 
 ### How it starts
 --------
