@@ -25,7 +25,7 @@ You will need
 - your bot's token in telegram (get here https://t.me/BotFather)
 - ID of your channel in telegram (send the post from the channel here https://t.me/getmyid_bot)
 
-You will also need to add the bot to your telegram channel, and grant admin rights
+*You will also need to add the bot to your telegram channel, and grant admin rights*
 
 Create an .env file with the following information.
 - VK_TOKEN
