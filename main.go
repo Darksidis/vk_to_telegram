@@ -126,9 +126,17 @@ func main() {
 
 				bot.Send(msg)
 
-				CleaningFiles ()
+			
 			}
+
+		}  else {
+
+				msg := tgbotapi.NewMessage(idChannel, text)
+				bot.Send(msg)
+
 		}
+
+		CleaningFiles ()
 	})
 
 	lp.Run()
