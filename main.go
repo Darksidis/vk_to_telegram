@@ -37,140 +37,50 @@ func main() {
 	idChannelStr := goDotEnvVariable("ID_CHANNEL") // id your channel in telegram
 	idChannel, err := strconv.ParseInt(idChannelStr, 10, 64)
 	check(err)
+
 	// get information about the group
 	group, err := vk.GroupsGetByID(nil)
 	idGroup := group[0].ID
+	
 	lp, err := longpoll.NewLongPoll(vk, idGroup)
 	if err != nil {
 		panic(err)
 	}
 
 	lp.WallPostNew(func(ctx context.Context, obj events.WallPostNewObject) {
+		idAuthorPost := obj.FromID
 		text := obj.Text
 		attacments := obj.Attachments
 		postID := obj.ID
 
-		var listAttchForEditMethod []string
-		if len(attacments) != 0 {
+		if idAuthorPost == idGroup*-1 {
+			//if idAuthorPost does not match with idGroup, then it means that the post is from the offer, skip
 
-			var inputFiles []interface{}
+			if len(attacments) != 0 {
+				//if not empty, then the post contains media content
 
-			mediaGroup := obj.Attachments
-			count := 0
-			for _, media := range mediaGroup {
+				listAttchForEditMethod, tgPostID := sendPostWithMedia(obj, idChannel, bot)
 
-				photo := media.Photo
-				nameFile := strconv.Itoa(photo.ID) + ".jpg"
+				if len(standaloneToken) != 0 && tgPostID != "" {
+					vkStandalone := api.NewVK(standaloneToken)
 
-				if photo.ID != 0 {
-					nameForEditMethod := addToListAttacments("photo", photo.OwnerID, photo.ID)
-					listAttchForEditMethod = append(listAttchForEditMethod, nameForEditMethod)
-
-					//sizes := photo.Sizes
-
-					photoUrl := photo.MaxSize().URL
-					fmt.Println("photourl: ", photoUrl)
-					response, err := sendingRequest(photoUrl)
-					path := filepath.Join("inputMedia", "photos", nameFile)
-					err = downloadFile(path, response)
-					check(err)
-
-					file := createInputFile(path, nameFile)
-					input := tgbotapi.NewInputMediaPhoto(file)
-					if count == 0 {
-						input.Caption = text
-						count += 1
-					}
-					inputFiles = append(inputFiles, input)
-
-				}
-				file := media.Doc
-				fileURL := file.URL
-				fileName := file.Title
-				if len(fileURL) != 0 {
-					response, err := sendingRequest(fileURL)
-
-					nameForEditMethod := addToListAttacments("doc", file.OwnerID, file.ID)
-					listAttchForEditMethod = append(listAttchForEditMethod, nameForEditMethod)
-
-					nameFile := fmt.Sprintf("%s.gif", fileName)
-					path := filepath.Join("inputMedia", "files", nameFile)
-					err = downloadFile(path, response)
-					check(err)
-
-					file := createInputFile(path, nameFile)
-					input := tgbotapi.NewInputMediaDocument(file)
-					if count == 0 {
-						input.Caption = text
-						count += 1
-					}
-					inputFiles = append(inputFiles, input)
-
-					// ... скачиваем гифку и отправляем
-				}
-				video := media.Video
-				videoName := video.Title
-				if video.ID != 0 {
-					nameForEditMethod := addToListAttacments("video", video.OwnerID, video.ID)
-					listAttchForEditMethod = append(listAttchForEditMethod, nameForEditMethod)
-
-					videoURL := getUrlVideo(video.OwnerID, video.ID)
-					if len(videoURL) != 0 {
-						// add to failed status in post
-						response, err := sendingRequest(videoURL)
-						nameFile := fmt.Sprintf("%s.mp4", videoName)
-						path := filepath.Join("inputMedia", "videos", nameFile)
-						err = downloadFile(path, response)
-						check(err)
-
-						file := createInputFile(path, nameFile)
-
-						input := tgbotapi.NewInputMediaVideo(file)
-						if count == 0 {
-							input.Caption = text
-							count += 1
-						}
-						inputFiles = append(inputFiles, input)
-					}
-					// .. download video
+					editPost(vkStandalone, idGroup, postID, tgPostID, text, urlTgGroup, listAttchForEditMethod)
 				}
 
-			}
-			fmt.Println("len", len(inputFiles))
-			fmt.Println("len", inputFiles)
-			if len(inputFiles) != 0 {
-				// If we got a message
+			} else {
+				//if there is no media content in the post, we send only the text
+				var emptyListAttach []string
+				tgPostID := sendPostWithTextOnly(idChannel, bot, text)
 
-				msg := tgbotapi.NewMediaGroup(idChannel, inputFiles)
-				postChannel, err := bot.SendMediaGroup(msg)
-				fmt.Println(postChannel)
-
-				check(err)
-
-				tgPostID := strconv.Itoa(postChannel[0].MessageID)
 				if len(standaloneToken) != 0 {
 					vkStandalone := api.NewVK(standaloneToken)
-					editPost(vkStandalone, idGroup, postID, tgPostID, text, urlTgGroup, listAttchForEditMethod)
 
+					editPost(vkStandalone, idGroup, postID, tgPostID, text, urlTgGroup, emptyListAttach)
 				}
 			}
 
-		} else {
-
-			msg := tgbotapi.NewMessage(idChannel, text)
-			postChannel, err := bot.Send(msg)
-			check(err)
-			tgPostID := strconv.Itoa(postChannel.MessageID)
-
-			if len(standaloneToken) != 0 {
-				vkStandalone := api.NewVK(standaloneToken)
-				editPost(vkStandalone, idGroup, postID, tgPostID, text, urlTgGroup, listAttchForEditMethod)
-			}
-
+			CleaningFiles()
 		}
-
-		CleaningFiles()
-
 	})
 
 	lp.Run()
@@ -199,13 +109,128 @@ func initBot(token string) *tgbotapi.BotAPI {
 func goDotEnvVariable(key string) string {
 
 	// load .env file
-	err := godotenv.Load("prod.env")
+	err := godotenv.Load("local.env")
 
 	if err != nil {
 		log.Fatalf("Error loading .env file")
 	}
 
 	return os.Getenv(key)
+}
+
+func sendPostWithMedia(obj events.WallPostNewObject, idChannel int64, bot *tgbotapi.BotAPI) ([]string, string) {
+
+	text := obj.Text
+	var listAttchForEditMethod []string
+
+	var inputFiles []interface{}
+
+	mediaGroup := obj.Attachments
+	count := 0
+	for _, media := range mediaGroup {
+
+		photo := media.Photo
+		nameFile := strconv.Itoa(photo.ID) + ".jpg"
+
+		if photo.ID != 0 {
+			nameForEditMethod := addToListAttacments("photo", photo.OwnerID, photo.ID)
+			listAttchForEditMethod = append(listAttchForEditMethod, nameForEditMethod)
+
+			//sizes := photo.Sizes
+
+			photoUrl := photo.MaxSize().URL
+			response, err := sendingRequest(photoUrl)
+			path := filepath.Join("inputMedia", "photos", nameFile)
+			err = downloadFile(path, response)
+			check(err)
+
+			file := createInputFile(path, nameFile)
+			input := tgbotapi.NewInputMediaPhoto(file)
+			if count == 0 {
+				input.Caption = text
+				count += 1
+			}
+			inputFiles = append(inputFiles, input)
+
+		}
+		file := media.Doc
+		fileURL := file.URL
+		fileName := file.Title
+		if len(fileURL) != 0 {
+			response, err := sendingRequest(fileURL)
+
+			nameForEditMethod := addToListAttacments("doc", file.OwnerID, file.ID)
+			listAttchForEditMethod = append(listAttchForEditMethod, nameForEditMethod)
+
+			nameFile := fmt.Sprintf("%s.gif", fileName)
+			path := filepath.Join("inputMedia", "files", nameFile)
+			err = downloadFile(path, response)
+			check(err)
+
+			file := createInputFile(path, nameFile)
+			input := tgbotapi.NewInputMediaDocument(file)
+			if count == 0 {
+				input.Caption = text
+				count += 1
+			}
+			inputFiles = append(inputFiles, input)
+
+			// ... скачиваем гифку и отправляем
+		}
+		video := media.Video
+		videoName := video.Title
+		if video.ID != 0 {
+			nameForEditMethod := addToListAttacments("video", video.OwnerID, video.ID)
+			listAttchForEditMethod = append(listAttchForEditMethod, nameForEditMethod)
+
+			videoURL := getUrlVideo(video.OwnerID, video.ID)
+			if len(videoURL) != 0 {
+				// add to failed status in post
+				response, err := sendingRequest(videoURL)
+				nameFile := fmt.Sprintf("%s.mp4", videoName)
+				path := filepath.Join("inputMedia", "videos", nameFile)
+				err = downloadFile(path, response)
+				check(err)
+
+				file := createInputFile(path, nameFile)
+
+				input := tgbotapi.NewInputMediaVideo(file)
+				if count == 0 {
+					input.Caption = text
+					count += 1
+				}
+				inputFiles = append(inputFiles, input)
+			}
+			// .. download video
+		}
+
+	}
+	if len(inputFiles) != 0 {
+		// If we got a message
+
+		msg := tgbotapi.NewMediaGroup(idChannel, inputFiles)
+		postChannel, err := bot.SendMediaGroup(msg)
+		check(err)
+
+		tgPostID := strconv.Itoa(postChannel[0].MessageID)
+
+		return listAttchForEditMethod, tgPostID
+
+	}
+
+	return listAttchForEditMethod, ""
+
+}
+
+func sendPostWithTextOnly(idChannel int64, bot *tgbotapi.BotAPI, text string) string {
+
+	msg := tgbotapi.NewMessage(idChannel, text)
+	postChannel, err := bot.Send(msg)
+	check(err)
+	tgPostID := strconv.Itoa(postChannel.MessageID)
+
+	return tgPostID
+
 }
 
 func addToListAttacments(typeMedia string, ownerID int, mediaID int) string {
@@ -216,8 +241,6 @@ func addToListAttacments(typeMedia string, ownerID int, mediaID int) string {
 }
 
 func editPost(vk *api.VK, idGroup int, postID int, tgPostID string, text string, urlTgGroup string, attachments []string) {
-	fmt.Println(postID)
-	fmt.Println(idGroup)
 
 	urlTgPost := urlTgGroup + "/" + tgPostID
 	attachments = append(attachments, urlTgPost)
@@ -231,11 +254,10 @@ func editPost(vk *api.VK, idGroup int, postID int, tgPostID string, text string,
 	par["message"] = text
 	par["attachments"] = attachments
 
-	edit, err := vk.WallEdit(par)
+	_, err := vk.WallEdit(par)
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println(edit)
 }
 
 func CleaningFiles() {
@@ -291,18 +313,6 @@ func downloadFile(filepath string, resp *http.Response) (err error) {
 	return nil
 }
 
-func getJsonWithRegexp(data string) string {
-	data = strings.Replace(data, "\n", "", -1)
-
-	findUrlReg, err := regexp.Compile("var ytInitialData(.*?)" + "</script>(.*?)")
-	check(err)
-
-	jsonData := findUrlReg.FindString(data)
-	jsonData = strings.Replace(jsonData, "var ytInitialData = ", "", -1)
-	jsonData = strings.Replace(jsonData, ";</script>", "", -1)
-	return jsonData
-
-}
 func getUrlVideo(ownerId int, videoId int) string {
 	strOwnerId := strconv.Itoa(ownerId)
 	strVideoId := strconv.Itoa(videoId)
@@ -326,8 +336,6 @@ func getUrlVideo(ownerId int, videoId int) string {
 
 	bodyHtml, err := getHtmlPage(request)
 	check(err)
-
-	fmt.Println("body: ", bodyHtml)
 
 	embedUrl = findWithRegexp(bodyHtml)
 
@@ -426,7 +434,6 @@ func findWithRegexp(data string) string {
 			break
 		}
 	}
-	fmt.Println("embedUrl: ", embedUrl)
 	return embedUrl
 
 }
