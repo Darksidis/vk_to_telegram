@@ -7,7 +7,6 @@ import (
 	"github.com/SevereCloud/vksdk/v2/events"
 	"github.com/SevereCloud/vksdk/v2/longpoll-bot"
 	"github.com/anaskhan96/soup"
-	"github.com/corpix/uarand"
 	"github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/joho/godotenv"
 	"io"
@@ -41,7 +40,7 @@ func main() {
 	// get information about the group
 	group, err := vk.GroupsGetByID(nil)
 	idGroup := group[0].ID
-	
+
 	lp, err := longpoll.NewLongPoll(vk, idGroup)
 	if err != nil {
 		panic(err)
@@ -59,18 +58,24 @@ func main() {
 			if len(attacments) != 0 {
 				//if not empty, then the post contains media content
 
-				listAttchForEditMethod, tgPostID := sendPostWithMedia(obj, idChannel, bot)
+				listAttchForEditMethod, inputFiles := gettingMedia(obj)
 
-				if len(standaloneToken) != 0 && tgPostID != "" {
-					vkStandalone := api.NewVK(standaloneToken)
+				if len(inputFiles) != 0 {
+					tgPostID := sendPost(idChannel, bot, text, inputFiles, "media")
 
-					editPost(vkStandalone, idGroup, postID, tgPostID, text, urlTgGroup, listAttchForEditMethod)
+					if len(standaloneToken) != 0 && tgPostID != "" {
+						vkStandalone := api.NewVK(standaloneToken)
+
+						editPost(vkStandalone, idGroup, postID, tgPostID, text, urlTgGroup, listAttchForEditMethod)
+					}
 				}
 
 			} else {
 				//if there is no media content in the post, we send only the text
 				var emptyListAttach []string
-				tgPostID := sendPostWithTextOnly(idChannel, bot, text)
+				var emptyInputFiles []interface{}
+
+				tgPostID := sendPost(idChannel, bot, text, emptyInputFiles, "only_text")
 
 				if len(standaloneToken) != 0 {
 					vkStandalone := api.NewVK(standaloneToken)
@@ -118,7 +123,7 @@ func goDotEnvVariable(key string) string {
 	return os.Getenv(key)
 }
 
-func sendPostWithMedia(obj events.WallPostNewObject, idChannel int64, bot *tgbotapi.BotAPI) ([]string, string) {
+func gettingMedia(obj events.WallPostNewObject) ([]string, []interface{}) {
 
 	text := obj.Text
 	var listAttchForEditMethod []string
@@ -205,32 +210,31 @@ func sendPostWithMedia(obj events.WallPostNewObject, idChannel int64, bot *tgbot
 		}
 
 	}
-	if len(inputFiles) != 0 {
-		// If we got a message
 
-		msg := tgbotapi.NewMediaGroup(idChannel, inputFiles)
-		postChannel, err := bot.SendMediaGroup(msg)
-		check(err)
-
-		tgPostID := strconv.Itoa(postChannel[0].MessageID)
-
-		return listAttchForEditMethod, tgPostID
-
-	}
-
-	return listAttchForEditMethod, ""
+	return listAttchForEditMethod, inputFiles
 
 }
 
-func sendPostWithTextOnly(idChannel int64, bot *tgbotapi.BotAPI, text string) string {
+func sendPost(idChannel int64, bot *tgbotapi.BotAPI, text string, inputFiles []interface{}, status string) string {
+	var tgPostID string
 
-	msg := tgbotapi.NewMessage(idChannel, text)
-	postChannel, err := bot.Send(msg)
-	check(err)
-	tgPostID := strconv.Itoa(postChannel.MessageID)
+	if status == "only_text" {
+		msg := tgbotapi.NewMessage(idChannel, text)
+		postChannel, err := bot.Send(msg)
+		check(err)
+		tgPostID = strconv.Itoa(postChannel.MessageID)
+
+	}
+
+	if status == "media" {
+		msg := tgbotapi.NewMediaGroup(idChannel, inputFiles)
+		postChannel, err := bot.SendMediaGroup(msg)
+		check(err)
+		tgPostID = strconv.Itoa(postChannel[0].MessageID)
+
+	}
 
 	return tgPostID
-
 }
 
 func addToListAttacments(typeMedia string, ownerID int, mediaID int) string {
@@ -343,12 +347,6 @@ func getUrlVideo(ownerId int, videoId int) string {
 
 }
 
-func GetUserAgent() string {
-	userAgent := uarand.GetRandom()
-
-	return userAgent
-
-}
 func getElementsFromHtmlPage(request *http.Response, tagList []string) (string, error) {
 
 	bodyHtml, err := getHtmlPage(request)
