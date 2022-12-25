@@ -25,7 +25,13 @@ You will need
 - your bot's token in telegram (get here https://t.me/BotFather)
 - ID of your channel in telegram (send the post from the channel here https://t.me/getmyid_bot)
 - URL telegram-group. Visible in the channel
+
 - standalone token is required for editing posts. Optionally, if not necessary, then do nothing with *STANDALONE_TOKEN* in the env file. How to get described here (https://vk.com/@steadyschool-kak-sozdat-standalone-prilozhenie-i-poluchit-token)
+The link that will need to be entered in the browser will have the following format
+```
+https://oauth.vk.com/authorize?client_id=** ID YOUR APP **&display=page&redirect_uri=https://oauth.vk.com/blank.html&scope=wall,offline&response_type=token&v=5.130
+```
+
 
 *You will also need to add the bot to your telegram channel, and grant admin rights*
 
